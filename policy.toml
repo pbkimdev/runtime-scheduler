@@ -80,6 +80,13 @@ safety_seconds = 60
 # what keeps GitHub from disabling the scheduled workflows after 60 days
 # (evidence #8).
 commit_heartbeat_minutes = 60
+# Repositories the scan skips entirely; their runs are never listed. The
+# scheduler's own repository is here because its jobs are public (native 0),
+# never routed, and so contribute nothing to a budget or a share, while
+# arriving every 15 minutes. Left in, each tick would see the previous
+# tick's allocate job, report "jobs", and force a ledger commit, which is
+# exactly what commit_heartbeat_minutes exists to avoid.
+exclude_repos = ["pbkimdev/runtime-scheduler"]
 
 [watchdog]
 # The watchdog resets routes when RUNTIME_STATE.expires_at is more than this

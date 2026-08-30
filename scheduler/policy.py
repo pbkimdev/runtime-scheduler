@@ -72,6 +72,7 @@ class LedgerPolicy:
     overlap_minutes: int
     safety_seconds: int
     commit_heartbeat_minutes: int
+    exclude_repos: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -291,6 +292,7 @@ def parse_policy(raw: Mapping[str, Any], where: str = "policy") -> Policy:
             commit_heartbeat_minutes=int(
                 _req(ledger_raw, "commit_heartbeat_minutes", "[ledger]")
             ),
+            exclude_repos=tuple(_req(ledger_raw, "exclude_repos", "[ledger]")),
         ),
         watchdog_max_state_age_epochs=int(
             _req(watchdog_raw, "max_state_age_epochs", "[watchdog]")

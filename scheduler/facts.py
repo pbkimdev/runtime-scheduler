@@ -90,17 +90,24 @@ def _trailing_failures(reads: list[dict[str, Any]], provider: str) -> int:
 def _enumerate_repos(
     client: GitHubClient, policy: Policy, warnings: list[str]
 ) -> tuple[list[tuple[str, bool]], bool]:
-    """Every repository the org enumeration returns, plus the personal list."""
+    """Every repository the org enumeration returns, plus the personal list,
+    minus the ones policy excludes. An excluded repository's runs are never
+    listed, so it costs no API call either."""
     repos: list[tuple[str, bool]] = []
+    excluded = set(policy.ledger.exclude_repos)
     ok = True
     try:
         for repo in client.list_org_repos(policy.repos.org):
+            if repo["full_name"] in excluded:
+                continue
             repos.append((repo["full_name"], bool(repo.get("private"))))
     except GitHubError as exc:
         ok = False
         warnings.append(f"org repository enumeration failed: {exc}")
 
     for full_name in policy.repos.personal:
+        if full_name in excluded:
+            continue
         owner, _, name = full_name.partition("/")
         try:
             meta = client.get_repo(owner, name)

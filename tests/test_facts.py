@@ -44,6 +44,7 @@ class FakeClient:
         self.repos = repos if repos is not None else []
         self.fail_repos = fail_repos
         self.created_since: list[str] = []
+        self.listed: list[str] = []
 
     def get_org_variable(self, org, name):
         return None if self.state is None else json.dumps(self.state)
@@ -58,6 +59,7 @@ class FakeClient:
 
     def list_runs(self, owner, repo, created_since):
         self.created_since.append(created_since)
+        self.listed.append(f"{owner}/{repo}")
         return []
 
     def list_jobs(self, owner, repo, run_id):
@@ -125,3 +127,20 @@ def test_the_state_cursor_never_rewinds_the_ledger(policy, tmp_path):
     )
     _collect(policy, tmp_path, client)
     assert client.created_since == ["2026-09-11T16:00:00Z"]
+
+
+def test_an_excluded_repository_is_never_listed(policy, tmp_path):
+    """The scheduler's own jobs are public (native 0) and never routed, so they
+    move no budget and no share. Scanning them would only make every tick see
+    the previous tick's allocate job and force a ledger commit."""
+    assert "pbkimdev/runtime-scheduler" in policy.ledger.exclude_repos
+    _write_ledger(tmp_path, "2026-09-11T17:50:00Z")
+    client = FakeClient(
+        repos=[
+            {"full_name": "pbkimdev/mantra", "private": True},
+            {"full_name": "pbkimdev/runtime-scheduler", "private": False},
+        ]
+    )
+    facts = _collect(policy, tmp_path, client)
+    assert client.listed == ["pbkimdev/mantra"]
+    assert facts.repos_scanned == 1
