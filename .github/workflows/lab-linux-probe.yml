@@ -1,0 +1,10 @@
+name: lab-linux-probe
+on: workflow_call
+jobs:
+  probe:
+    runs-on: ${{ vars.LAB_ROUTE || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - run: |
+          echo "LAB_ROUTE=[${{ vars.LAB_ROUTE }}] repo=${{ github.repository }} ImageOS=$ImageOS"
+          echo "runner.name=${{ runner.name }} runner.os=${{ runner.os }} runner.arch=${{ runner.arch }}"
