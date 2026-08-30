@@ -1,0 +1,79 @@
+name: contract-probe (red by design)
+
+# This run is supposed to fail. It exercises the one undocumented behavior the
+# fallback chain rests on: whether `needs.<job>.outputs` survives a failed job
+# (E4a). `contract.yml` dispatches it weekly and asserts the shape below.
+#
+# Expected: a=failure, b=failure, c=success, guard_a=skipped,
+# witness_a=success, witness_b=success.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  a:
+    # Writes an output, then fails. A dependent must still read the output.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      x: ${{ steps.set.outputs.x }}
+    steps:
+      - id: set
+        run: echo "x=set" >> "$GITHUB_OUTPUT"
+      - run: exit 1
+
+  b:
+    # Fails before writing anything, so its output stays empty.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      x: ${{ steps.set.outputs.x }}
+    steps:
+      - run: exit 1
+      - id: set
+        run: echo "x=set" >> "$GITHUB_OUTPUT"
+
+  c:
+    # The control: writes the output and succeeds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      x: ${{ steps.set.outputs.x }}
+    steps:
+      - id: set
+        run: echo "x=set" >> "$GITHUB_OUTPUT"
+
+  guard_a:
+    # Must be SKIPPED. If it runs, outputs did not survive the failed job and
+    # every fallback job in the collection now fires on workload failures.
+    needs: a
+    if: failure() && needs.a.outputs.x != 'set'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "guard_a ran; a.outputs.x=[${{ needs.a.outputs.x }}]"
+
+  witness_a:
+    # Must RUN. This is E4a's positive half.
+    needs: a
+    if: failure() && needs.a.outputs.x == 'set'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "witness_a ran; a.outputs.x=[${{ needs.a.outputs.x }}]"
+
+  witness_b:
+    # Must RUN. This is the shape the fallback jobs use: an unwritten output is
+    # neither 'success' nor 'failure', so the work never reported a verdict.
+    needs: b
+    if: >-
+      failure()
+      && needs.b.outputs.x != 'success'
+      && needs.b.outputs.x != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "witness_b ran; b.outputs.x=[${{ needs.b.outputs.x }}]"

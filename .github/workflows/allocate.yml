@@ -1,0 +1,68 @@
+name: allocate
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"      # 5 min is the documented floor (evidence #8)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run builds and commits the ledger but writes no variable.
+        required: false
+        default: dry-run
+        type: choice
+        options: [dry-run, publish]
+
+permissions:
+  contents: write               # for the ledger commit
+
+concurrency:
+  group: allocate
+  cancel-in-progress: false
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest      # free and unlimited: this repository is public
+    timeout-minutes: 10
+    env:
+      # Publishing needs an explicit dispatch, or a schedule plus an org-level
+      # opt-in. Anything else is a dry run.
+      MODE: ${{ (inputs.mode == 'publish' || (github.event_name == 'schedule' && vars.ALLOCATE_MODE == 'publish')) && 'publish' || 'dry-run' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --frozen
+
+      - name: Compute and publish routes
+        id: allocate
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_SCHEDULER_TOKEN }}
+          GH_PERSONAL_BILLING_TOKEN: ${{ secrets.RUNTIME_PERSONAL_BILLING_TOKEN }}
+          BLACKSMITH_TOKEN: ${{ secrets.BLACKSMITH_USAGE_TOKEN }}
+        run: |
+          set -o pipefail
+          if [ "$MODE" = "publish" ]; then
+            uv run scheduler allocate --policy policy.toml | tee decision.json
+          else
+            uv run scheduler allocate --policy policy.toml --dry-run | tee decision.json
+          fi
+
+      - name: Commit the ledger
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain ledger)" ]; then
+            echo "ledger unchanged"
+            exit 0
+          fi
+          tick="$(date -u +%Y-%m-%dT%H:%MZ)"
+          if [ -s decision.json ]; then
+            tick="$(jq -r '.tick // empty' decision.json || true)"
+            [ -n "$tick" ] || tick="$(date -u +%Y-%m-%dT%H:%MZ)"
+          fi
+          month="${tick:0:7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ledger
+          git commit -m "Ledger: ${month} tick ${tick}"
+          git pull --rebase origin main
+          git push

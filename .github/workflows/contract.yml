@@ -1,0 +1,31 @@
+name: contract
+
+# Weekly proof that the fallback chain's undocumented premise still holds.
+# A red run here means GitHub changed E4a behavior and the reusable workflows
+# need a new contract, not that a job flaked.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: write        # dispatch contract-probe.yml and read its jobs
+  contents: read
+
+concurrency:
+  group: contract
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --frozen
+      - name: Verify the E4a job-output contract
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run scheduler contract-check --repo ${{ github.repository }}

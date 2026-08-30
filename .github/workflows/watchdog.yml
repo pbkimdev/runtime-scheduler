@@ -1,0 +1,49 @@
+name: watchdog
+
+# Offset from the allocator by roughly half an epoch. It covers an allocator
+# that crashes, hangs, or starts failing on a code defect. It does not cover an
+# expired token, which both workflows share.
+#
+# A watchdog reset sends all portable work to GitHub-hosted runners, which
+# drains the organization allowance faster. Do not enable this workflow before
+# the GitHub budget with stop usage exists.
+
+on:
+  schedule:
+    - cron: "7-59/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run reports the decision and writes no variable.
+        required: false
+        default: dry-run
+        type: choice
+        options: [dry-run, publish]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MODE: ${{ (inputs.mode == 'publish' || (github.event_name == 'schedule' && vars.ALLOCATE_MODE == 'publish')) && 'publish' || 'dry-run' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --frozen
+
+      - name: Check the decision expiry
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_SCHEDULER_TOKEN }}
+        run: |
+          if [ "$MODE" = "publish" ]; then
+            uv run scheduler watchdog --policy policy.toml
+          else
+            uv run scheduler watchdog --policy policy.toml --dry-run
+          fi
