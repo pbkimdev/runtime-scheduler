@@ -40,15 +40,30 @@ class SourceResult:
     vendor_total: float = 0.0
     drift: float = 0.0
     alert: bool = False
+    unattributed: dict[str, float] = field(default_factory=dict)
 
 
 def drift_fraction(ledger_total: float, vendor_total: float) -> float:
     return (ledger_total - vendor_total) / max(vendor_total, 1.0)
 
 
-def vendor_minutes_by_family(usage: Mapping[str, Any]) -> dict[str, float]:
-    """Actions minutes from the enhanced billing usage report, by OS."""
+def vendor_minutes_by_family(
+    usage: Mapping[str, Any],
+    private_repos: set[str] | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Actions minutes from the enhanced billing usage report, by OS.
+
+    The report lists every repository, public ones included, and a public
+    repository's minutes are free. The ledger counts only what draws the
+    allowance, so without the `private_repos` filter the two sides are not
+    comparable and every day looks like drift.
+
+    Returns (billable minutes by family, minutes the caller could not
+    attribute). A repository that no longer exists cannot be classified, so its
+    minutes land in the second dict and are recorded rather than guessed at.
+    """
     totals: dict[str, float] = {}
+    unattributed: dict[str, float] = {}
     for item in usage.get("usageItems", []):
         if item.get("product", "").lower() != "actions":
             continue
@@ -57,8 +72,13 @@ def vendor_minutes_by_family(usage: Mapping[str, Any]) -> dict[str, float]:
         family = SKU_FAMILY.get(item.get("sku", ""))
         if family is None:
             continue
-        totals[family] = totals.get(family, 0.0) + float(item.get("quantity", 0.0))
-    return totals
+        quantity = float(item.get("quantity", 0.0))
+        repo = item.get("repositoryName", "")
+        if private_repos is not None and repo not in private_repos:
+            unattributed[repo] = unattributed.get(repo, 0.0) + quantity
+            continue
+        totals[family] = totals.get(family, 0.0) + quantity
+    return totals, unattributed
 
 
 def _compare(
@@ -66,6 +86,7 @@ def _compare(
     ledger_minutes: Mapping[str, float],
     vendor_minutes: Mapping[str, float],
     threshold: float,
+    unattributed: Mapping[str, float] | None = None,
 ) -> SourceResult:
     ledger_total = sum(ledger_minutes.values())
     vendor_total = sum(vendor_minutes.values())
@@ -79,6 +100,7 @@ def _compare(
         vendor_total=vendor_total,
         drift=round(drift, 5),
         alert=abs(drift) > threshold,
+        unattributed=dict(unattributed or {}),
     )
 
 
@@ -90,6 +112,7 @@ def reconcile_github(
     *,
     personal: bool,
     threshold: float,
+    private_repos: set[str] | None = None,
 ) -> SourceResult:
     source = "github_personal" if personal else "github_org"
     try:
@@ -102,11 +125,13 @@ def reconcile_github(
         return SourceResult(
             source=source, status=STATUS_SKIPPED, reason=f"unreachable: {exc}"
         )
+    vendor, unattributed = vendor_minutes_by_family(usage, private_repos)
     return _compare(
         source,
         ledger.raw_minutes_by_family(owner),
-        vendor_minutes_by_family(usage),
+        vendor,
         threshold,
+        unattributed,
     )
 
 

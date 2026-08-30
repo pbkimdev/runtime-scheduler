@@ -9,6 +9,8 @@ from tests.conftest import at, ledger_with, make_record
 
 NOW = at("2026-09-11T03:04:00Z")
 
+PRIVATE_REPOS = {"mantra", "homelab-infra"}
+
 USAGE = {
     "usageItems": [
         {
@@ -16,18 +18,31 @@ USAGE = {
             "sku": "Actions Linux",
             "unitType": "Minutes",
             "quantity": 100,
+            "repositoryName": "mantra",
         },
         {
             "product": "actions",
             "sku": "Actions Linux",
             "unitType": "Minutes",
             "quantity": 20,
+            "repositoryName": "homelab-infra",
         },
         {
             "product": "actions",
             "sku": "Actions Windows",
             "unitType": "Minutes",
             "quantity": 30,
+            "repositoryName": "mantra",
+        },
+        # Public: real minutes, billed to nobody. Comparing them against the
+        # ledger, which counts only what draws the allowance, is what made the
+        # first live tick look like 84 percent drift.
+        {
+            "product": "actions",
+            "sku": "Actions Linux",
+            "unitType": "Minutes",
+            "quantity": 37,
+            "repositoryName": "runtime-scheduler-lab",
         },
         # Not Actions minutes: storage rows and shared-storage GB never count.
         {
@@ -35,12 +50,14 @@ USAGE = {
             "sku": "Actions Linux",
             "unitType": "GigabyteHours",
             "quantity": 900,
+            "repositoryName": "mantra",
         },
         {
             "product": "packages",
             "sku": "Packages",
             "unitType": "Minutes",
             "quantity": 900,
+            "repositoryName": "mantra",
         },
     ]
 }
@@ -63,7 +80,15 @@ class FakeClient:
 
 
 def test_only_actions_minutes_reach_the_comparison():
-    assert rec.vendor_minutes_by_family(USAGE) == {"linux": 120.0, "windows": 30.0}
+    totals, unattributed = rec.vendor_minutes_by_family(USAGE)
+    assert totals == {"linux": 157.0, "windows": 30.0}
+    assert unattributed == {}
+
+
+def test_public_repository_minutes_are_not_compared_against_the_ledger():
+    totals, unattributed = rec.vendor_minutes_by_family(USAGE, PRIVATE_REPOS)
+    assert totals == {"linux": 120.0, "windows": 30.0}
+    assert unattributed == {"runtime-scheduler-lab": 37.0}
 
 
 @pytest.mark.parametrize(
@@ -107,12 +132,19 @@ def _ledger():
 
 def test_a_matching_ledger_raises_no_alert():
     result = rec.reconcile_github(
-        FakeClient(USAGE), _ledger(), NOW, "pbkimdev", personal=False, threshold=0.05
+        FakeClient(USAGE),
+        _ledger(),
+        NOW,
+        "pbkimdev",
+        personal=False,
+        threshold=0.05,
+        private_repos=PRIVATE_REPOS,
     )
     assert result.status == rec.STATUS_OK
     assert result.ledger_total == 150.0
     assert result.vendor_total == 150.0
     assert result.alert is False
+    assert result.unattributed == {"runtime-scheduler-lab": 37.0}
 
 
 def test_drift_beyond_the_threshold_alerts_and_snaps_the_ledger():
@@ -124,11 +156,18 @@ def test_drift_beyond_the_threshold_alerts_and_snaps_the_ledger():
                 "sku": "Actions Linux",
                 "unitType": "Minutes",
                 "quantity": 60,
+                "repositoryName": "mantra",
             }
         ]
     }
     result = rec.reconcile_github(
-        FakeClient(thin), ledger, NOW, "pbkimdev", personal=False, threshold=0.05
+        FakeClient(thin),
+        ledger,
+        NOW,
+        "pbkimdev",
+        personal=False,
+        threshold=0.05,
+        private_repos=PRIVATE_REPOS,
     )
     assert result.alert is True
     alert = rec.apply_results(

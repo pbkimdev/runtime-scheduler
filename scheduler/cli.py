@@ -103,6 +103,15 @@ def _reconciliation_rows(results) -> list[str]:
         f"| {result.ledger_total} | {result.vendor_total} | {result.drift} |"
         for result in results
     ]
+    rows.append("")
+    # Minutes the vendor reported for repositories the ledger does not bill:
+    # public repositories, and repositories that no longer exist.
+    rows += [
+        f"- {result.source} did not compare {sum(result.unattributed.values()):.0f} "
+        f"minutes from {', '.join(sorted(result.unattributed))}"
+        for result in results
+        if result.unattributed
+    ]
     return [*rows, ""]
 
 
@@ -170,6 +179,7 @@ def cmd_allocate(args: argparse.Namespace) -> int:
                 policy.repos.org,
                 personal=False,
                 threshold=threshold,
+                private_repos=facts.private_repos,
             )
         )
         personal_token = env("GH_PERSONAL_BILLING_TOKEN")

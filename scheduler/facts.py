@@ -45,6 +45,9 @@ class Facts:
     previous_state: dict[str, Any]
     warnings: list[str] = field(default_factory=list)
     repos_scanned: int = 0
+    # Bare repository names that GitHub bills for, keyed the way the usage
+    # report keys them. Reconciliation needs this to compare like with like.
+    private_repos: set[str] = field(default_factory=set)
     runs_scanned: int = 0
     jobs_added: int = 0
     read_failures: dict[str, int] = field(default_factory=dict)
@@ -288,6 +291,9 @@ def collect_facts(
         previous_state=previous_state,
         warnings=warnings,
         repos_scanned=len(repos),
+        private_repos={
+            full_name.split("/", 1)[1] for full_name, private in repos if private
+        },
         runs_scanned=scan.runs_scanned,
         jobs_added=scan.jobs_added,
         read_failures=read_failures,
