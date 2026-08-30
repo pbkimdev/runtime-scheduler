@@ -4,10 +4,12 @@
 calendar month. It is the primary quota source (ADR 0008); the vendor billing
 reports are the reconciliation baseline, not the running total.
 
-The allocate workflow writes the file every tick and commits it whenever it
-changed: new jobs, a cursor advance, or a reconciliation. The commit is also
-what keeps the scheduled workflows alive, because GitHub disables scheduled
-workflows after 60 days without repository activity (evidence #8).
+The allocate workflow rewrites and commits the file when the tick was worth
+recording: new jobs arrived, a reconciliation ran, or the cursor has moved more
+than `commit_heartbeat_minutes` past the committed one. A quiet tick leaves the
+file alone, so a quiet organization gets an hourly commit rather than 96 a day.
+The heartbeat is also what keeps the scheduled workflows alive, because GitHub
+disables them after 60 days without repository activity (evidence #8).
 
 ## Format
 
@@ -20,6 +22,7 @@ commit diff shows the jobs that arrived and nothing else.
 | `month` | `YYYY-MM`, matching the file name |
 | `cursor` | The incremental read position in the jobs API. The next tick scans from `cursor - overlap_minutes` |
 | `reconciled_on` | `YYYY-MM-DD` of the last reconciliation, so a re-run of the same tick does not reconcile twice |
+| `drift_alert_until` | While the tick is before this, every provider's margin doubles. Set for 24 hours when a reconciliation finds drift past the threshold |
 | `corrections` | Ledger snaps applied after a drift beyond the threshold. Each carries a signed `delta` in native units |
 | `reconciliations` | Every comparison against a vendor report, kept for the audit trail |
 | `jobs` | One record per finished job |

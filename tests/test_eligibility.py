@@ -169,3 +169,39 @@ def test_a_failure_while_half_open_reopens_it(policy):
 def test_the_circuit_closes_after_a_clean_half_open_epoch(policy):
     times = _infra(3, NOW - timedelta(minutes=100), spacing_minutes=5)
     assert el.circuit_state(NOW, times, policy) == el.CLOSED
+
+
+def test_a_drift_alert_doubles_every_margin(policy):
+    """PLAN.md reconciliation table: beyond the threshold, double every margin
+    for the next 24 hours. Stale and drift stack."""
+    plain = el.budget_for(
+        "github", used=0, peak30=84, now=NOW, policy=policy, stale=False
+    )
+    drifted = el.budget_for(
+        "github", used=0, peak30=84, now=NOW, policy=policy, stale=False, drift=True
+    )
+    both = el.budget_for(
+        "github", used=0, peak30=84, now=NOW, policy=policy, stale=True, drift=True
+    )
+    assert (plain.margin, plain.margin_factor, plain.margin_reason) == (84, 1.0, "none")
+    assert (drifted.margin, drifted.margin_factor, drifted.margin_reason) == (
+        168,
+        2.0,
+        "drift",
+    )
+    assert (both.margin, both.margin_factor, both.margin_reason) == (
+        336,
+        4.0,
+        "stale+drift",
+    )
+    assert drifted.as_state()["margin_reason"] == "drift"
+
+
+def test_the_drift_window_expires(policy):
+    """Archbox has no allowance, so its budget still has to carry the factor."""
+    budget = el.budget_for(
+        "archbox", used=0, peak30=0, now=NOW, policy=policy, stale=False, drift=True
+    )
+    assert budget.cap_hard is None
+    assert budget.margin == 120
+    assert budget.margin_reason == "drift"

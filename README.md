@@ -97,7 +97,8 @@ in the expression is the belt to that braces.
     }
   },
   "rejected": {"linux": {"blacksmith": "pacing_exceeded"}},
-  "budgets": {"github": {"used": 610, "margin": 84, "cap": 915.0, "cap_hard": 1800.0}},
+  "budgets": {"github": {"used": 610, "margin": 84, "cap": 915.0, "cap_hard": 1800.0,
+                         "margin_factor": 1.0, "margin_reason": "none"}},
   "cursor": "2026-09-11T17:58:31Z",
   "staleness": "normal",
   "circuits": {"github": "closed", "blacksmith": "closed", "archbox": "closed"},
@@ -114,7 +115,7 @@ in the expression is the belt to that braces.
 | `status` | `ok`, `pacing_exceeded` when nothing was primary-eligible, `no_eligible_runtime` when nothing was eligible at all, `watchdog_reset` when the watchdog reset the routes |
 | `expires_at` | Three epochs out. The watchdog resets routes when this is more than one epoch in the past |
 | `rejected` | Every provider dropped, with the reason, before any deficit was consulted |
-| `budgets` | Native units spent, the margin that covers the 30-minute blind spot, the paced cap, and the hard cap |
+| `budgets` | Native units spent, the margin that covers the 30-minute blind spot, the paced cap, and the hard cap. `margin_factor` is 2 while the ledger is stale or a drift alert is open, 4 while both are, and `margin_reason` says which |
 | `staleness` | `normal`, `degraded` (margins doubled), `stale` (hosted providers become fallback-only) |
 | `circuits` | `closed`, `open`, `half_open`. Derived each tick from the ledger, never stored |
 | `reads` | The last two ticks' read outcomes per provider. Two consecutive failures reject a provider |

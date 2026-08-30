@@ -47,13 +47,17 @@ class Budget:
     margin: float
     cap_pace: float | None
     cap_hard: float | None
+    margin_factor: float = 1.0
+    margin_reason: str = "none"
 
-    def as_state(self) -> dict[str, float | None]:
+    def as_state(self) -> dict[str, float | str | None]:
         return {
             "used": round(self.used, 5),
             "margin": round(self.margin, 5),
             "cap": None if self.cap_pace is None else round(self.cap_pace, 5),
             "cap_hard": None if self.cap_hard is None else round(self.cap_hard, 5),
+            "margin_factor": round(self.margin_factor, 5),
+            "margin_reason": self.margin_reason,
         }
 
 
@@ -118,13 +122,22 @@ def budget_for(
     now: datetime,
     policy,
     stale: bool,
+    drift: bool = False,
 ) -> Budget:
+    """The epoch budget. Two conditions widen the margin, and they stack.
+
+    A stale ledger means the allocator cannot see what was spent. A drift alert
+    means what it did see disagreed with the vendor by more than the threshold.
+    Either doubles the margin over the blind window; both together quadruple it.
+    """
     allowance = policy.allowance(provider)
     margin = max(policy.margins.floor_native_units, peak30)
-    if stale:
-        margin *= policy.margins.stale_multiplier
+    reasons = [name for name, on in (("stale", stale), ("drift", drift)) if on]
+    factor = policy.margins.stale_multiplier ** len(reasons)
+    margin *= factor
+    reason = "+".join(reasons) or "none"
     if allowance is None:
-        return Budget(provider, None, used, margin, None, None)
+        return Budget(provider, None, used, margin, None, None, factor, reason)
     reserve = policy.reserves[provider]
     return Budget(
         provider=provider,
@@ -133,6 +146,8 @@ def budget_for(
         margin=margin,
         cap_pace=pacing.cap_pace(allowance, reserve, now, policy.slack),
         cap_hard=pacing.cap_hard(allowance, reserve),
+        margin_factor=factor,
+        margin_reason=reason,
     )
 
 

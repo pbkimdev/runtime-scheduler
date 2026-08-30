@@ -218,3 +218,44 @@ def test_reconciliation_runs_once_a_day():
     ledger.reconciled_on = "2026-09-11"
     assert rec.should_reconcile(at("2026-09-11T03:15:00Z"), ledger, 3) is False
     assert rec.should_reconcile(at("2026-09-12T03:00:00Z"), ledger, 3) is True
+
+
+def test_a_drift_alert_opens_a_24_hour_margin_window():
+    ledger = _ledger()
+    result = rec.SourceResult(
+        source="github_org", status=rec.STATUS_OK, ledger_total=1, vendor_total=1
+    )
+    result.alert = True
+    rec.apply_results(
+        ledger,
+        [result],
+        NOW,
+        github_os_multiplier={"linux": 1, "windows": 2, "macos": 10},
+        org="pbkimdev",
+    )
+    assert ledger.drift_alert_until == "2026-09-12T03:04:00Z"
+    assert ledger.drift_alert_active(NOW) is True
+    assert ledger.drift_alert_active(at("2026-09-12T02:00:00Z")) is True
+    assert ledger.drift_alert_active(at("2026-09-12T03:05:00Z")) is False
+
+
+def test_a_clean_reconciliation_opens_no_window():
+    ledger = _ledger()
+    result = rec.reconcile_github(
+        FakeClient(USAGE),
+        ledger,
+        NOW,
+        "pbkimdev",
+        personal=False,
+        threshold=0.05,
+        private_repos=PRIVATE_REPOS,
+    )
+    rec.apply_results(
+        ledger,
+        [result],
+        NOW,
+        github_os_multiplier={"linux": 1, "windows": 2, "macos": 10},
+        org="pbkimdev",
+    )
+    assert ledger.drift_alert_until is None
+    assert ledger.drift_alert_active(NOW) is False

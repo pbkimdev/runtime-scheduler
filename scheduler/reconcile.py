@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .github import GitHubClient, GitHubError
@@ -221,6 +221,10 @@ def apply_results(
                 "source": result.source,
             }
         )
+    if alert:
+        # "Double every margin for the next 24 hours." Persisted, because the
+        # 96 ticks that follow are the ones that need the wider margin.
+        ledger.drift_alert_until = format_ts(now + timedelta(hours=24))
     ledger.reconciled_on = now.date().isoformat()
     ledger.dirty = True
     return alert

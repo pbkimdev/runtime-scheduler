@@ -51,6 +51,7 @@ class Facts:
     runs_scanned: int = 0
     jobs_added: int = 0
     read_failures: dict[str, int] = field(default_factory=dict)
+    idle_archbox: int = 0
     scan_ok: bool = True
 
 
@@ -195,6 +196,62 @@ def _idle_archbox_runners(
     return idle, True
 
 
+def build_provider_states(
+    ledger: MonthLedger,
+    policy: Policy,
+    now: datetime,
+    *,
+    staleness: str,
+    read_failures: dict[str, int],
+    idle_archbox: int,
+    pressure: dict[str, float | None],
+) -> dict[str, eligibility.ProviderState]:
+    drift = ledger.drift_alert_active(now)
+    states: dict[str, eligibility.ProviderState] = {}
+    for provider in PROVIDERS:
+        states[provider] = eligibility.ProviderState(
+            provider=provider,
+            live=policy.is_live(provider),
+            hosted=policy.providers[provider].hosted,
+            circuit=eligibility.circuit_state(
+                now, ledger.infra_times(provider), policy
+            ),
+            read_failures=read_failures[provider],
+            idle_runners=idle_archbox if provider == "archbox" else None,
+            median_latency_s=pressure[provider],
+            budget=eligibility.budget_for(
+                provider,
+                used=ledger.native_used(provider, owner=policy.repos.org),
+                peak30=ledger.peak30(
+                    provider,
+                    now,
+                    policy.margins.peak_window_minutes,
+                    policy.margins.peak_lookback_days,
+                ),
+                now=now,
+                policy=policy,
+                stale=staleness in (DEGRADED, STALE),
+                drift=drift,
+            ),
+        )
+    return states
+
+
+def refresh_budgets(facts: Facts, policy: Policy) -> None:
+    """Rebuild the budgets after reconciliation, so a tick that fires a drift
+    alert routes under the doubled margin it just asked for rather than leaving
+    the doubling to the next tick."""
+    facts.provider_states = build_provider_states(
+        facts.ledger,
+        policy,
+        facts.now,
+        staleness=facts.staleness,
+        read_failures=facts.read_failures,
+        idle_archbox=facts.idle_archbox,
+        pressure=facts.pressure,
+    )
+
+
 def collect_facts(
     now: datetime,
     policy: Policy,
@@ -207,12 +264,19 @@ def collect_facts(
     ledger = MonthLedger.load(ledger_dir, month, month_start)
     warnings: list[str] = []
 
+    previous_state = read_state(client, policy.repos.org)
+    # A publishing tick records its cursor in RUNTIME_STATE, which is written
+    # every tick, while the ledger file is only committed on the heartbeat. Take
+    # the newer of the two so a publish-mode allocator never rescans more than
+    # the overlap. A dry-run state describes a decision that was never
+    # published, so its cursor is not authority for anything.
+    if previous_state.get("dry_run") is False:
+        ledger.adopt_cursor(previous_state.get("cursor"), month_start)
+
     cursor = parse_ts(ledger.cursor) or month_start
     scan_from = max(
         month_start, cursor - timedelta(minutes=policy.ledger.overlap_minutes)
     )
-
-    previous_state = read_state(client, policy.repos.org)
 
     repos, repo_read_ok = _enumerate_repos(client, policy, warnings)
     scan = _scan_repos(client, policy, ledger, repos, scan_from, month_start, warnings)
@@ -245,38 +309,21 @@ def collect_facts(
         provider: _trailing_failures(reads, provider) for provider in PROVIDERS
     }
 
-    pressure: dict[str, float | None] = {}
-    provider_states: dict[str, eligibility.ProviderState] = {}
-    for provider in PROVIDERS:
-        latency = ledger.median_latency_s(
+    pressure = {
+        provider: ledger.median_latency_s(
             provider, now, policy.margins.peak_window_minutes
         )
-        pressure[provider] = latency
-        budget = eligibility.budget_for(
-            provider,
-            used=ledger.native_used(provider, owner=policy.repos.org),
-            peak30=ledger.peak30(
-                provider,
-                now,
-                policy.margins.peak_window_minutes,
-                policy.margins.peak_lookback_days,
-            ),
-            now=now,
-            policy=policy,
-            stale=staleness in (DEGRADED, STALE),
-        )
-        provider_states[provider] = eligibility.ProviderState(
-            provider=provider,
-            live=policy.is_live(provider),
-            hosted=policy.providers[provider].hosted,
-            circuit=eligibility.circuit_state(
-                now, ledger.infra_times(provider), policy
-            ),
-            read_failures=read_failures[provider],
-            idle_runners=idle_archbox if provider == "archbox" else None,
-            median_latency_s=latency,
-            budget=budget,
-        )
+        for provider in PROVIDERS
+    }
+    provider_states = build_provider_states(
+        ledger,
+        policy,
+        now,
+        staleness=staleness,
+        read_failures=read_failures,
+        idle_archbox=idle_archbox,
+        pressure=pressure,
+    )
 
     return Facts(
         now=now,
@@ -297,5 +344,6 @@ def collect_facts(
         runs_scanned=scan.runs_scanned,
         jobs_added=scan.jobs_added,
         read_failures=read_failures,
+        idle_archbox=idle_archbox,
         scan_ok=repo_read_ok and runners_ok,
     )

@@ -202,10 +202,21 @@ class MonthLedger:
     month: str
     cursor: str
     reconciled_on: str | None = None
+    # While now is before this, every margin doubles. Reconciliation sets it
+    # when drift passes the threshold; it is persisted so the doubling covers
+    # the 96 ticks in the next 24 hours rather than one tick.
+    drift_alert_until: str | None = None
     jobs: dict[str, JobRecord] = field(default_factory=dict)
     corrections: list[dict[str, Any]] = field(default_factory=list)
     reconciliations: list[dict[str, Any]] = field(default_factory=list)
     dirty: bool = False
+    # The cursor as it stands in the committed file. `cursor` moves during a
+    # tick; this does not, so the commit heartbeat measures against disk.
+    loaded_cursor: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.loaded_cursor:
+            self.loaded_cursor = self.cursor
 
     # ---- persistence ---------------------------------------------------
 
@@ -232,6 +243,7 @@ class MonthLedger:
             month=raw.get("month", month),
             cursor=raw.get("cursor", format_ts(month_start)),
             reconciled_on=raw.get("reconciled_on"),
+            drift_alert_until=raw.get("drift_alert_until"),
             jobs=jobs,
             corrections=raw.get("corrections", []),
             reconciliations=raw.get("reconciliations", []),
@@ -243,6 +255,7 @@ class MonthLedger:
             "month": self.month,
             "cursor": self.cursor,
             "reconciled_on": self.reconciled_on,
+            "drift_alert_until": self.drift_alert_until,
             "corrections": self.corrections,
             "reconciliations": self.reconciliations,
         }
@@ -280,6 +293,25 @@ class MonthLedger:
         self.jobs[record.key] = record
         self.dirty = True
         return True
+
+    def drift_alert_active(self, now: datetime) -> bool:
+        until = parse_ts(self.drift_alert_until)
+        return until is not None and now < until
+
+    def adopt_cursor(self, value: str | None, month_start: datetime) -> None:
+        """Take a cursor a previous publishing tick recorded in RUNTIME_STATE.
+
+        A publish-mode allocator therefore never rescans more than the overlap,
+        even when the ledger file lags behind because the commit heartbeat has
+        not fired yet. Never rewinds, and never reaches into a previous month.
+        """
+        candidate = parse_ts(value)
+        current = parse_ts(self.cursor)
+        if candidate is None or candidate < month_start:
+            return
+        if current is not None and candidate <= current:
+            return
+        self.cursor = format_ts(candidate)
 
     def advance_cursor(
         self,
