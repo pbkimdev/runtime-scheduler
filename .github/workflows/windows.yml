@@ -1,0 +1,76 @@
+name: windows
+
+# Two route slots, so `primary` and `fallback` and no `last`: Windows is
+# capable on GitHub and Blacksmith only. Every step runs under bash so the
+# caller writes one command, not two dialects.
+
+on:
+  workflow_call:
+    inputs:
+      run:
+        description: Shell command to execute. Must be one command.
+        required: true
+        type: string
+      side_effect:
+        description: none | idempotent | external. Only "none" gets fallback jobs.
+        required: false
+        default: external
+        type: string
+      timeout_minutes:
+        required: false
+        default: 30
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  primary:
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_WINDOWS_1) || 'windows-latest' }}
+    outputs:
+      work_outcome: ${{ steps.report.outputs.work_outcome }}
+      attempt_runner: ${{ steps.report.outputs.attempt_runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: work
+        name: work
+        shell: bash
+        env:
+          WORK_COMMAND: ${{ inputs.run }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"
+      - id: report
+        name: report
+        if: always()
+        shell: bash
+        run: |
+          echo "work_outcome=${{ steps.work.outcome }}" >> "$GITHUB_OUTPUT"
+          echo "attempt_runner=$RUNNER_NAME" >> "$GITHUB_OUTPUT"
+
+  fallback:
+    needs: primary
+    if: >-
+      failure()
+      && needs.primary.outputs.work_outcome != 'success'
+      && needs.primary.outputs.work_outcome != 'failure'
+      && inputs.side_effect == 'none'
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_WINDOWS_2) || 'windows-latest' }}
+    outputs:
+      work_outcome: ${{ steps.report.outputs.work_outcome }}
+      attempt_runner: ${{ steps.report.outputs.attempt_runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: work
+        name: work
+        shell: bash
+        env:
+          WORK_COMMAND: ${{ inputs.run }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"
+      - id: report
+        name: report
+        if: always()
+        shell: bash
+        run: |
+          echo "work_outcome=${{ steps.work.outcome }}" >> "$GITHUB_OUTPUT"
+          echo "attempt_runner=$RUNNER_NAME" >> "$GITHUB_OUTPUT"

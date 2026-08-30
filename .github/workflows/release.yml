@@ -1,0 +1,39 @@
+name: release
+
+# Side-effecting work gets one job and no fallback. You cannot accidentally
+# give a release a fallback job, because this workflow has none to enable
+# (invariant I5). There is no route variable here, so the scheduler is not
+# involved and cannot become involved.
+
+on:
+  workflow_call:
+    inputs:
+      run:
+        description: Shell command to execute. Must be one command.
+        required: true
+        type: string
+    secrets:
+      PUBLISH_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer tag queues behind an in-flight publish instead of interrupting it
+  # (evidence #16).
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: work
+        shell: bash
+        env:
+          WORK_COMMAND: ${{ inputs.run }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"

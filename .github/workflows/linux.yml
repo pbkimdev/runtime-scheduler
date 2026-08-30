@@ -1,0 +1,113 @@
+name: linux
+
+# The Linux reusable workflow. The caller names no runner, no provider, and no
+# quota: it declares what to run, how long it may take, and whether the work
+# may be attempted twice. The route expression lives here, not in the caller
+# (E11b: `vars` inside a called reusable workflow resolve in the caller's
+# context), so a caller passes nothing.
+
+on:
+  workflow_call:
+    inputs:
+      run:
+        description: Shell command to execute. Must be one command.
+        required: true
+        type: string
+      side_effect:
+        description: none | idempotent | external. Only "none" gets fallback jobs.
+        required: false
+        default: external
+        type: string
+      timeout_minutes:
+        required: false
+        default: 30
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  primary:
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_LINUX_1) || 'ubuntu-latest' }}
+    outputs:
+      work_outcome: ${{ steps.report.outputs.work_outcome }}
+      attempt_runner: ${{ steps.report.outputs.attempt_runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: work
+        name: work
+        shell: bash
+        env:
+          # Passing the caller's command through the environment keeps the
+          # expression out of the script body.
+          WORK_COMMAND: ${{ inputs.run }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"
+      - id: report
+        name: report
+        if: always()
+        shell: bash
+        run: |
+          echo "work_outcome=${{ steps.work.outcome }}" >> "$GITHUB_OUTPUT"
+          echo "attempt_runner=$RUNNER_NAME" >> "$GITHUB_OUTPUT"
+
+  fallback:
+    # An infrastructure failure is a job that failed while its work step never
+    # reported success or failure (ADR 0007). `skipped` means a step before the
+    # work step failed, which is also infrastructure; testing `== ''` would
+    # miss every checkout failure (E4c).
+    needs: primary
+    if: >-
+      failure()
+      && needs.primary.outputs.work_outcome != 'success'
+      && needs.primary.outputs.work_outcome != 'failure'
+      && inputs.side_effect == 'none'
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_LINUX_2) || 'ubuntu-latest' }}
+    outputs:
+      work_outcome: ${{ steps.report.outputs.work_outcome }}
+      attempt_runner: ${{ steps.report.outputs.attempt_runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: work
+        name: work
+        shell: bash
+        env:
+          WORK_COMMAND: ${{ inputs.run }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"
+      - id: report
+        name: report
+        if: always()
+        shell: bash
+        run: |
+          echo "work_outcome=${{ steps.work.outcome }}" >> "$GITHUB_OUTPUT"
+          echo "attempt_runner=$RUNNER_NAME" >> "$GITHUB_OUTPUT"
+
+  last:
+    needs: [primary, fallback]
+    if: >-
+      failure()
+      && needs.fallback.result == 'failure'
+      && needs.fallback.outputs.work_outcome != 'success'
+      && needs.fallback.outputs.work_outcome != 'failure'
+      && inputs.side_effect == 'none'
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_LINUX_3) || 'ubuntu-latest' }}
+    outputs:
+      work_outcome: ${{ steps.report.outputs.work_outcome }}
+      attempt_runner: ${{ steps.report.outputs.attempt_runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: work
+        name: work
+        shell: bash
+        env:
+          WORK_COMMAND: ${{ inputs.run }}
+        run: bash -euo pipefail -c "$WORK_COMMAND"
+      - id: report
+        name: report
+        if: always()
+        shell: bash
+        run: |
+          echo "work_outcome=${{ steps.work.outcome }}" >> "$GITHUB_OUTPUT"
+          echo "attempt_runner=$RUNNER_NAME" >> "$GITHUB_OUTPUT"
