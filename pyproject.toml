@@ -1,0 +1,28 @@
+[project]
+name = "runtime-scheduler"
+version = "0.1.0"
+description = "RuntimeScheduler: publishes runner routes as organization Actions variables."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+scheduler = "scheduler.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["scheduler"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
