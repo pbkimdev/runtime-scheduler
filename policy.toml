@@ -1,0 +1,165 @@
+# RuntimeScheduler policy. Every knob the allocator reads lives here; no
+# workflow file carries quota, allocation, or provider policy.
+
+[epoch]
+minutes = 15
+route_expiry_epochs = 3
+
+[allocation]
+# Targets are uniform over the providers capable of each family.
+# The 33/33/33 headline is the linux family.
+band_percentage_points = 10
+tiebreak = ["archbox", "blacksmith", "github"]
+
+[pacing]
+slack = 0.15
+
+[reserves]
+# 0.20 for GitHub until E9b is observed. The plan's calibrated value is 0.10,
+# backed by the vendor budget with stop usage, but E9b (what happens when an
+# allowance is exhausted under a $0 stop budget) was deferred at Gate 0
+# because observing it costs the rest of a month on one owner. Until E9b is
+# observed, GitHub carries Blacksmith's uncalibrated reserve.
+github = 0.20
+blacksmith = 0.20
+
+[margins]
+floor_native_units = 60
+peak_window_minutes = 30
+peak_lookback_days = 30
+stale_multiplier = 2.0
+
+[capacity]
+archbox_min_idle_runners = 1
+max_start_latency_s = 120
+
+[circuit]
+trip_infra_failures = 3
+trip_window_minutes = 30
+trip_read_failures = 2
+open_epochs = 4
+
+[allowances]
+github_org_native_minutes = 2000        # evidence #7
+github_personal_native_minutes = 2000   # evidence #7
+blacksmith_native_minutes = 3000        # evidence #17, x64 2vCPU minutes
+
+[providers.github]
+hosted = true
+live = true
+
+[providers.blacksmith]
+hosted = true
+# Flips to true when Paul supplies the written answer on free-tier exhaustion
+# and BLACKSMITH_USAGE_TOKEN is in the repository secrets. A non-live provider
+# is rejected with reason `not_live` before anything else and never lands in a
+# route, even though Blacksmith is already installed on the organization.
+live = false
+
+[providers.archbox]
+hosted = false
+# Flips to true in Phase 2, when the disposable-guest warm pool registers
+# ephemeral runners with the label archbox-linux-x64.
+live = false
+
+[repos]
+# Ledger scan scope. `scan = "all"` enumerates the organization each tick, so
+# a new repository is covered without a policy edit.
+org = "pbkimdev"
+scan = "all"
+personal_owner = "paulbkim-dev"
+personal = []
+
+[ledger]
+overlap_minutes = 60
+safety_seconds = 60
+
+[watchdog]
+# The watchdog resets routes when RUNTIME_STATE.expires_at is more than this
+# many epochs in the past.
+max_state_age_epochs = 1
+
+[families.linux]
+capable = ["github", "blacksmith", "archbox"]
+route_slots = 3
+default_label = "ubuntu-latest"
+
+[families.linux.labels]
+github = "ubuntu-latest"
+blacksmith = "blacksmith-4vcpu-ubuntu-2404"
+archbox = "archbox-linux-x64"
+
+[families.windows]
+capable = ["github", "blacksmith"]
+route_slots = 2
+default_label = "windows-latest"
+
+[families.windows.labels]
+github = "windows-latest"
+blacksmith = "blacksmith-4vcpu-windows-2025"   # Public Beta (evidence #17)
+
+[families.macos]
+capable = ["github", "blacksmith"]
+route_slots = 2
+default_label = "macos-latest"
+
+[families.macos.labels]
+github = "macos-latest"
+blacksmith = "blacksmith-6vcpu-macos-latest"
+
+[normalization]
+unit = "one minute on a 2-vCPU x64 Linux runner"
+# The formula is minutes x (vCPU / 2) x os_weight, with os_weight 1 for Linux,
+# 2 for Windows, 10 for macOS. Where a vendor publishes its own equivalence,
+# the vendor ratio wins: Blacksmith macOS 6vCPU is 20 (evidence #17), not the
+# formula's 30. Do not silently "correct" that row.
+os_weight_linux = 1
+os_weight_windows = 2
+os_weight_macos = 10
+
+[normalization.github_os_multiplier]
+# GitHub native minutes per wall minute, by family, in a private repository.
+# ESTIMATES: evidence #7 did not carry the included-minute multiplier table.
+# Re-read the pricing page before the first paced month.
+linux = 1
+windows = 2
+macos = 10
+
+[normalization.native]
+# Native units per wall minute, by runner label. Patterns are fnmatch globs
+# matched in document order, so the first match wins; keep the specific
+# patterns above the general ones. GitHub labels carry no entry here because
+# GitHub native units come from github_os_multiplier and are zero in a public
+# repository. Unknown labels get rate 1 and a ::warning.
+"blacksmith-2vcpu-*" = 1
+"blacksmith-4vcpu-ubuntu-*" = 2
+"blacksmith-8vcpu-ubuntu-*" = 4
+"blacksmith-4vcpu-windows-*" = 4
+"blacksmith-6vcpu-macos-*" = 20
+"archbox-*" = 0
+
+[normalization.normalized]
+# Normalized units per wall minute, by runner label. Same ordered-glob rule.
+# These exist only to compute allocation shares.
+"blacksmith-2vcpu-*" = 1
+"blacksmith-4vcpu-ubuntu-*" = 2
+"blacksmith-8vcpu-ubuntu-*" = 4
+"blacksmith-4vcpu-windows-*" = 4
+"blacksmith-6vcpu-macos-*" = 20
+"archbox-*" = 4
+"ubuntu-latest" = 2
+"ubuntu-*" = 2
+"windows-latest" = 4
+"windows-*" = 4
+"macos-latest" = 15
+"macos-*" = 15
+
+[reconciliation]
+# The first tick at or after this UTC hour reconciles the ledger against the
+# vendor reports, once a day.
+hour_utc = 3
+drift_alert_fraction = 0.05
+
+[rescue]
+enabled = false                 # Phase 3, gated on E15
+max_queue_minutes = 20
