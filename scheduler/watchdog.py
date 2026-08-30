@@ -100,4 +100,9 @@ def run(
     if not dry_run:
         client.patch_org_variable(org, STATE_VARIABLE, serialize_state(reset_state))
 
-    return (1 if result.written else 0), result
+    # Non-zero whenever a reset happened, not only when a route value moved:
+    # the red Actions tab is the signal that the allocator stopped publishing,
+    # and routes already sitting at their defaults do not make that untrue. A
+    # dry run reports the same condition without writing, so a
+    # disabled-but-dispatched watchdog still surfaces it.
+    return 1, result

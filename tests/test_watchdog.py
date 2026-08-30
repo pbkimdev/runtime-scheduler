@@ -74,12 +74,15 @@ def test_an_expired_state_resets_routes_and_exits_red(policy):
     assert json.loads(client.writes[-1][1])["status"] == wd.RESET_STATUS
 
 
-def test_a_stale_state_over_default_routes_is_only_a_warning(policy):
+def test_a_reset_exits_red_even_when_no_route_moved(policy):
+    """PLAN.md step 3: exit non-zero whenever a reset happened. Routes that
+    already sit at their defaults do not make the allocator's silence less of
+    a problem, and the red Actions tab is the whole signal."""
     current = dict(wd.default_routes(policy))
     current["RUNTIME_STATE"] = json.dumps({"status": "ok"})
     client = FakeClient(current)
     code, result = wd.run(client, policy, NOW, dry_run=False)
-    assert code == 0
+    assert code == 1
     assert result.written == []
     assert result.decision.reset is True
     # The state is still rewritten so the next tick sees the reset.
@@ -94,4 +97,16 @@ def test_dry_run_never_writes(policy):
     code, result = wd.run(client, policy, NOW, dry_run=True)
     assert client.writes == []
     assert result.written == ["RUNTIME_ROUTE_LINUX_1"]
+    assert code == 1
+
+
+def test_dry_run_still_reports_a_stale_state_red(policy):
+    """A disabled-but-dispatched watchdog has to surface the condition even
+    though it writes nothing."""
+    current = dict(wd.default_routes(policy))
+    current["RUNTIME_STATE"] = json.dumps({"expires_at": "2026-09-11T16:00:00Z"})
+    client = FakeClient(current)
+    code, result = wd.run(client, policy, NOW, dry_run=True)
+    assert client.writes == []
+    assert result.written == []
     assert code == 1
