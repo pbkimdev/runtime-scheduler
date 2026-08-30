@@ -6,7 +6,9 @@
 # Registering a runner is an approval item; run only after Paul says yes.
 set -euo pipefail
 repo=pbkimdev/runtime-scheduler-lab
-reg_token=$(gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token)
+# mise prints a banner line around gh's output; keep only the token line.
+reg_token=$(gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token 2>/dev/null | grep -E '^[A-Z0-9]{20,}$' | tail -1)
+[ -n "$reg_token" ] || { echo "no registration token returned" >&2; exit 1; }
 docker run --rm --name e13-runner \
   -e REPO_URL="https://github.com/$repo" \
   -e RUNNER_TOKEN="$reg_token" \
