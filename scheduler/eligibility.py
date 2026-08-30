@@ -136,11 +136,40 @@ def budget_for(
     )
 
 
+def _capacity_reason(state: ProviderState, policy) -> Reason | None:
+    """Queue pressure for a hosted pool, idle runners for a self-hosted one.
+
+    Zero online Archbox runners means offline, not unhealthy: there is nothing
+    to recover from and nothing to back off.
+    """
+    if state.hosted:
+        latency = state.median_latency_s
+        if latency is not None and latency > policy.capacity.max_start_latency_s:
+            return QUEUE_PRESSURE
+        return None
+    idle = state.idle_runners or 0
+    if idle < policy.capacity.archbox_min_idle_runners:
+        return NO_IDLE_CAPACITY
+    return None
+
+
+def _budget_reason(state: ProviderState) -> Reason | None:
+    budget = state.budget
+    if budget.cap_hard is None or budget.cap_pace is None:
+        return None
+    headroom = budget.used + budget.margin
+    if headroom > budget.cap_hard:
+        return RESERVE_EXCEEDED
+    if headroom > budget.cap_pace:
+        return PACING_EXCEEDED
+    return None
+
+
 def reasons_for(state: ProviderState, staleness: str, policy) -> list[Reason]:
-    reasons: list[Reason] = []
     if not state.live:
         return [NOT_LIVE]
 
+    reasons: list[Reason] = []
     if state.read_failures >= policy.circuit.trip_read_failures:
         reasons.append(UNHEALTHY_READS)
     if state.circuit == OPEN:
@@ -148,22 +177,11 @@ def reasons_for(state: ProviderState, staleness: str, policy) -> list[Reason]:
     elif state.circuit == HALF_OPEN:
         reasons.append(CIRCUIT_HALF_OPEN)
 
-    if state.hosted:
-        latency = state.median_latency_s
-        if latency is not None and latency > policy.capacity.max_start_latency_s:
-            reasons.append(QUEUE_PRESSURE)
-    else:
-        idle = state.idle_runners or 0
-        if idle < policy.capacity.archbox_min_idle_runners:
-            reasons.append(NO_IDLE_CAPACITY)
-
-    budget = state.budget
-    if budget.cap_hard is not None and budget.cap_pace is not None:
-        headroom = budget.used + budget.margin
-        if headroom > budget.cap_hard:
-            reasons.append(RESERVE_EXCEEDED)
-        elif headroom > budget.cap_pace:
-            reasons.append(PACING_EXCEEDED)
+    reasons.extend(
+        reason
+        for reason in (_capacity_reason(state, policy), _budget_reason(state))
+        if reason is not None
+    )
 
     # Over 24 hours of ledger lag, hosted providers become fallback-only. The
     # degradation direction is always toward the provider that cannot cost

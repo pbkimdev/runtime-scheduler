@@ -17,7 +17,10 @@ fmt:
 build:
 	uv build
 
-verify: lint test
+# pk-setup:verify
+verify:
+	./scripts/verify
+# pk-setup:verify-end
 
 allocate-dry:
 	uv run scheduler allocate --dry-run

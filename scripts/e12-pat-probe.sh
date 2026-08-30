@@ -18,8 +18,8 @@ probe() {
   fi
   printf '%-6s %-60s %s\n' "$method" "$path" "$code"
 }
-probe GET   "/orgs/$org/actions/runners"
-probe GET   "/orgs/$org/actions/variables"
+probe GET "/orgs/$org/actions/runners"
+probe GET "/orgs/$org/actions/variables"
 probe PATCH "/orgs/$org/actions/variables/RUNTIME_STATE" '{"value":"e12-probe"}'
-probe POST  "/orgs/$org/actions/runners/generate-jitconfig" '{"name":"e12-probe","runner_group_id":1,"labels":["e12-probe"]}'
-probe GET   "/organizations/$org/settings/billing/usage"
+probe POST "/orgs/$org/actions/runners/generate-jitconfig" '{"name":"e12-probe","runner_group_id":1,"labels":["e12-probe"]}'
+probe GET "/organizations/$org/settings/billing/usage"

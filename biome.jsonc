@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+  "files": {
+    "includes": [
+      "**/*.json",
+      "**/*.jsonc",
+      // The ledger is machine-written and deliberately compact: one job per
+      // line so a daily commit diff shows only the jobs that arrived.
+      "!ledger/*.json",
+      // Captured API payloads. Reformatting them would hide what the API sent.
+      "!**/tests/fixtures/**",
+      "!.venv",
+      "!.pkai"
+    ]
+  },
+  "assist": {
+    "enabled": false
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
+  },
+  "json": {
+    "formatter": {
+      "enabled": true
+    },
+    "linter": {
+      "enabled": true
+    },
+    "parser": {
+      "allowComments": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}

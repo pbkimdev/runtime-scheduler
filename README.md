@@ -131,10 +131,17 @@ Reject reasons: `not_live`, `circuit_open`, `circuit_half_open`,
 
 ```bash
 make dev
-make verify                       # ruff + pytest
+make verify                       # the whole gate, via ./scripts/verify
+make lint                         # just ruff
+make test                         # just pytest
 GH_TOKEN=$(gh auth token) uv run scheduler allocate \
   --dry-run --ledger-dir /tmp/ledger
 ```
+
+`make verify` runs `./scripts/verify`: gitleaks, ruff format and check (with
+C901 and PLR0912 as the complexity gate), pytest, vulture, pip-audit, Biome on
+JSON, yamlfmt and yamllint on YAML, and shellcheck and shfmt on shell.
+`mise.toml` pins the non-Python tools; `uvx` fetches vulture and pip-audit.
 
 A dry run reads the organization, builds the ledger, prints the decision as
 JSON on stdout and a summary on stderr, and writes no variable. `--now ISO`
@@ -185,5 +192,6 @@ policy.toml        every knob: reserves, allowances, rates, labels, liveness
 scheduler/         the package. No runtime dependencies
 ledger/            ledger/YYYY-MM.json, committed by the allocate workflow
 tests/             pytest
-scripts/           Phase 0 leftovers
+scripts/verify     the gate every other check runs through
+scripts/e1*.sh     Phase 0 leftovers
 ```

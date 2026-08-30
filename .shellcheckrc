@@ -1,0 +1,4 @@
+# Correctness stays on, including unused-variable (SC2034).
+# Do not disable SC* ranges or enable=all.
+external-sources=true
+source-path=SCRIPTDIR

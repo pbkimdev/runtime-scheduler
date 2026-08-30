@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "mode": "greenfield",
+  "root": "/home/paulbkim/projects/runtime-scheduler",
+  "isolation_root": null,
+  "vcs": [
+    "git"
+  ],
+  "vcs_roots": {
+    "git": "/home/paulbkim/projects/runtime-scheduler"
+  },
+  "stacks": [
+    "python",
+    "json",
+    "yaml",
+    "shell"
+  ],
+  "packs": [
+    "common",
+    "python",
+    "json",
+    "yaml",
+    "shell"
+  ],
+  "proofs": {
+    "python": [
+      "pyproject.toml",
+      "uv.lock",
+      "scheduler/cli.py"
+    ],
+    "json": [
+      "tests/fixtures/mantra-jobs.json",
+      "ledger/2026-08.json"
+    ],
+    "yaml": [
+      ".github/workflows/linux.yml",
+      ".github/workflows/allocate.yml"
+    ],
+    "shell": [
+      "scripts/e12-pat-probe.sh",
+      "scripts/e13-runner.sh"
+    ]
+  },
+  "generated_artifacts": [
+    {
+      "packs": [
+        "common",
+        "python",
+        "yaml",
+        "shell"
+      ],
+      "scope": "project",
+      "path": "mise.toml",
+      "sha256": "ab6dd69dd2a94324adbe94481c390eda9c57ffbf5ba1fbd8615f0c93f6613c0f"
+    },
+    {
+      "packs": [
+        "common"
+      ],
+      "scope": "project",
+      "path": "scripts/verify",
+      "sha256": "697b42ce1ea84dcd53b2aaab20dd243dcf1f59b1db9faefaa58ef8705a2306d2"
+    },
+    {
+      "packs": [
+        "json"
+      ],
+      "scope": "project",
+      "path": "biome.jsonc",
+      "sha256": "44cc1f710231f7f8b9034b61d9988b9b72257d3189dd804fdf942519111682f5"
+    },
+    {
+      "packs": [
+        "yaml"
+      ],
+      "scope": "project",
+      "path": ".yamllint.yaml",
+      "sha256": "24e1d8a8f42c7a727d2738788f35de5e85f96e228c4fe3ee8ee3836e966f3989"
+    },
+    {
+      "packs": [
+        "yaml"
+      ],
+      "scope": "project",
+      "path": "yamlfmt.yaml",
+      "sha256": "f07a5f3a3c8ebb9e9b798c208f3311c414c6675e70a9a30410bdef0c674096d7"
+    },
+    {
+      "packs": [
+        "shell"
+      ],
+      "scope": "project",
+      "path": ".shellcheckrc",
+      "sha256": "0649e426e9dec8164fac22dc24bdf6c61d7ddeecbccb60a1b44fd33e4c3d9b99"
+    }
+  ],
+  "managed_fragments": [
+    {
+      "packs": [
+        "python"
+      ],
+      "path": "pyproject.toml",
+      "selector": "toml-key:tool.ruff",
+      "sha256": "814aa84be9f8ece5aad4b47166263abae4ce28c976bc61aae163b787f13b2c5c"
+    },
+    {
+      "packs": [
+        "common"
+      ],
+      "path": "Makefile",
+      "selector": "text-marker:pk-setup:verify",
+      "sha256": "7053c046ee9349517eca5fc0f9b49cb8b31e8e981bb9ed35c03ceb39f34b6e06"
+    }
+  ],
+  "applied_at": "2026-08-30"
+}

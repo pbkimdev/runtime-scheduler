@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       side_effect:
-        description: none | idempotent | external. Only "none" gets fallback jobs.
+        description: none | idempotent | external. Only "none" retries.
         required: false
         default: external
         type: string
@@ -27,6 +27,7 @@ permissions:
 jobs:
   primary:
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    # yamllint disable-line rule:line-length
     runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_WINDOWS_1) || 'windows-latest' }}
     outputs:
       work_outcome: ${{ steps.report.outputs.work_outcome }}
@@ -49,12 +50,12 @@ jobs:
 
   fallback:
     needs: primary
+    # yamllint disable rule:line-length
     if: >-
-      failure()
-      && needs.primary.outputs.work_outcome != 'success'
-      && needs.primary.outputs.work_outcome != 'failure'
-      && inputs.side_effect == 'none'
+      failure() && needs.primary.outputs.work_outcome != 'success' && needs.primary.outputs.work_outcome != 'failure' && inputs.side_effect == 'none'
+    # yamllint enable rule:line-length
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    # yamllint disable-line rule:line-length
     runs-on: ${{ (github.event.repository.private && github.event.pull_request.head.repo.fork != true && vars.RUNTIME_ROUTE_WINDOWS_2) || 'windows-latest' }}
     outputs:
       work_outcome: ${{ steps.report.outputs.work_outcome }}

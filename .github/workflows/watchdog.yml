@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: dry-run reports the decision and writes no variable.
+        description: dry-run reports the decision, writes no variable.
         required: false
         default: dry-run
         type: choice
@@ -32,10 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      # yamllint disable-line rule:line-length
       MODE: ${{ (inputs.mode == 'publish' || (github.event_name == 'schedule' && vars.ALLOCATE_MODE == 'publish')) && 'publish' || 'dry-run' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      # astral-sh/setup-uv v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
       - run: uv sync --frozen
 
       - name: Check the decision expiry

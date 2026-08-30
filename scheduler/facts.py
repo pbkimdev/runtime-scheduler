@@ -83,6 +83,115 @@ def _trailing_failures(reads: list[dict[str, Any]], provider: str) -> int:
     return count
 
 
+def _enumerate_repos(
+    client: GitHubClient, policy: Policy, warnings: list[str]
+) -> tuple[list[tuple[str, bool]], bool]:
+    """Every repository the org enumeration returns, plus the personal list."""
+    repos: list[tuple[str, bool]] = []
+    ok = True
+    try:
+        for repo in client.list_org_repos(policy.repos.org):
+            repos.append((repo["full_name"], bool(repo.get("private"))))
+    except GitHubError as exc:
+        ok = False
+        warnings.append(f"org repository enumeration failed: {exc}")
+
+    for full_name in policy.repos.personal:
+        owner, _, name = full_name.partition("/")
+        try:
+            meta = client.get_repo(owner, name)
+            repos.append((meta["full_name"], bool(meta.get("private"))))
+        except GitHubError as exc:
+            ok = False
+            warnings.append(f"personal repository {full_name} unreadable: {exc}")
+    return repos, ok
+
+
+@dataclass
+class ScanResult:
+    jobs_added: int = 0
+    runs_scanned: int = 0
+    oldest_inflight: datetime | None = None
+    ok: bool = True
+
+
+def _scan_repos(
+    client: GitHubClient,
+    policy: Policy,
+    ledger: MonthLedger,
+    repos: list[tuple[str, bool]],
+    scan_from: datetime,
+    month_start: datetime,
+    warnings: list[str],
+) -> ScanResult:
+    result = ScanResult()
+    for full_name, private in repos:
+        owner, _, name = full_name.partition("/")
+        try:
+            runs = client.list_runs(owner, name, format_ts(scan_from))
+        except GitHubError as exc:
+            result.ok = False
+            warnings.append(f"run listing failed for {full_name}: {exc}")
+            continue
+        for run in runs:
+            result.runs_scanned += 1
+            _note_inflight(run, result)
+            try:
+                jobs = client.list_jobs(owner, name, int(run["id"]))
+            except GitHubError as exc:
+                result.ok = False
+                warnings.append(
+                    f"job listing failed for {full_name} run {run['id']}: {exc}"
+                )
+                continue
+            for job in jobs:
+                record = build_record(
+                    job=job,
+                    run=run,
+                    repo_full_name=full_name,
+                    private=private,
+                    policy=policy,
+                    warnings=warnings,
+                )
+                if (
+                    record is not None
+                    and record.completed >= month_start
+                    and ledger.add(record)
+                ):
+                    result.jobs_added += 1
+    return result
+
+
+def _note_inflight(run: dict[str, Any], result: ScanResult) -> None:
+    if run.get("status") == "completed":
+        return
+    created = parse_ts(run.get("created_at"))
+    if created is None:
+        return
+    if result.oldest_inflight is None or created < result.oldest_inflight:
+        result.oldest_inflight = created
+
+
+def _idle_archbox_runners(
+    client: GitHubClient, policy: Policy, warnings: list[str]
+) -> tuple[int, bool]:
+    idle = 0
+    archbox_label = policy.families["linux"].labels["archbox"]
+    try:
+        for runner in client.list_org_runners(policy.repos.org):
+            labels = {entry.get("name") for entry in runner.get("labels", [])}
+            if (
+                runner.get("status") == "online"
+                and not runner.get("busy")
+                and archbox_label in labels
+            ):
+                idle += 1
+    except GitHubError as exc:
+        warnings.append(f"runner inventory unreadable: {exc}")
+        return 0, False
+    return idle, True
+
+
 def collect_facts(
     now: datetime,
     policy: Policy,
@@ -102,88 +211,17 @@ def collect_facts(
 
     previous_state = read_state(client, policy.repos.org)
 
-    repos: list[tuple[str, bool]] = []
-    repo_read_ok = True
-    try:
-        for repo in client.list_org_repos(policy.repos.org):
-            repos.append((repo["full_name"], bool(repo.get("private"))))
-    except GitHubError as exc:
-        repo_read_ok = False
-        warnings.append(f"org repository enumeration failed: {exc}")
-
-    for full_name in policy.repos.personal:
-        owner, _, name = full_name.partition("/")
-        try:
-            meta = client.get_repo(owner, name)
-            repos.append((meta["full_name"], bool(meta.get("private"))))
-        except GitHubError as exc:
-            repo_read_ok = False
-            warnings.append(f"personal repository {full_name} unreadable: {exc}")
-
-    jobs_added = 0
-    runs_scanned = 0
-    oldest_inflight: datetime | None = None
-    for full_name, private in repos:
-        owner, _, name = full_name.partition("/")
-        try:
-            runs = client.list_runs(owner, name, format_ts(scan_from))
-        except GitHubError as exc:
-            repo_read_ok = False
-            warnings.append(f"run listing failed for {full_name}: {exc}")
-            continue
-        for run in runs:
-            runs_scanned += 1
-            if run.get("status") != "completed":
-                created = parse_ts(run.get("created_at"))
-                if created is not None and (
-                    oldest_inflight is None or created < oldest_inflight
-                ):
-                    oldest_inflight = created
-            try:
-                jobs = client.list_jobs(owner, name, int(run["id"]))
-            except GitHubError as exc:
-                repo_read_ok = False
-                warnings.append(
-                    f"job listing failed for {full_name} run {run['id']}: {exc}"
-                )
-                continue
-            for job in jobs:
-                record = build_record(
-                    job=job,
-                    run=run,
-                    repo_full_name=full_name,
-                    private=private,
-                    policy=policy,
-                    warnings=warnings,
-                )
-                if (
-                    record is not None
-                    and record.completed >= month_start
-                    and ledger.add(record)
-                ):
-                    jobs_added += 1
+    repos, repo_read_ok = _enumerate_repos(client, policy, warnings)
+    scan = _scan_repos(client, policy, ledger, repos, scan_from, month_start, warnings)
+    repo_read_ok = repo_read_ok and scan.ok
 
     ledger.advance_cursor(
         policy.ledger.safety_seconds,
         scanned_through=now if repo_read_ok else None,
-        oldest_inflight=oldest_inflight,
+        oldest_inflight=scan.oldest_inflight,
     )
 
-    runners_ok = True
-    idle_archbox = 0
-    archbox_label = policy.families["linux"].labels["archbox"]
-    try:
-        for runner in client.list_org_runners(policy.repos.org):
-            labels = {entry.get("name") for entry in runner.get("labels", [])}
-            if (
-                runner.get("status") == "online"
-                and not runner.get("busy")
-                and archbox_label in labels
-            ):
-                idle_archbox += 1
-    except GitHubError as exc:
-        runners_ok = False
-        warnings.append(f"runner inventory unreadable: {exc}")
+    idle_archbox, runners_ok = _idle_archbox_runners(client, policy, warnings)
 
     cursor_now = parse_ts(ledger.cursor) or month_start
     cursor_age_s = max(0.0, (now - cursor_now).total_seconds())
@@ -250,8 +288,8 @@ def collect_facts(
         previous_state=previous_state,
         warnings=warnings,
         repos_scanned=len(repos),
-        runs_scanned=runs_scanned,
-        jobs_added=jobs_added,
+        runs_scanned=scan.runs_scanned,
+        jobs_added=scan.jobs_added,
         read_failures=read_failures,
         scan_ok=repo_read_ok and runners_ok,
     )

@@ -63,60 +63,82 @@ def _write_summary(text: str) -> None:
         handle.write(text)
 
 
+def _route_rows(decision) -> list[str]:
+    rows = ["| family | status | routes |", "|---|---|---|"]
+    rows += [
+        f"| {name} | {family.status} | {', '.join(family.routes)} |"
+        for name, family in decision.families.items()
+    ]
+    rows += ["", "| family | provider | rejected because |", "|---|---|---|"]
+    rows += [
+        f"| {name} | {provider} | {reason} |"
+        for name, family in decision.families.items()
+        for provider, reason in sorted(family.rejected.items())
+    ]
+    return rows
+
+
+def _budget_rows(state: dict) -> list[str]:
+    rows = [
+        "| provider | used | margin | cap (paced) | cap (hard) | circuit |",
+        "|---|---|---|---|---|---|",
+    ]
+    rows += [
+        f"| {provider} | {budget['used']} | {budget['margin']} | "
+        f"{budget['cap']} | {budget['cap_hard']} | {state['circuits'][provider]} |"
+        for provider, budget in state["budgets"].items()
+    ]
+    return rows
+
+
+def _reconciliation_rows(results) -> list[str]:
+    if not results:
+        return []
+    rows = [
+        "| reconciliation | status | ledger | vendor | drift |",
+        "|---|---|---|---|---|",
+    ]
+    rows += [
+        f"| {result.source} | {result.status}{(' ' + result.reason).rstrip()} "
+        f"| {result.ledger_total} | {result.vendor_total} | {result.drift} |"
+        for result in results
+    ]
+    return [*rows, ""]
+
+
+def _publish_rows(plans, dry_run: bool) -> list[str]:
+    if not plans:
+        return []
+    rows = ["| variable | value | action |", "|---|---|---|"]
+    for plan in plans:
+        if not plan.changed:
+            action = "unchanged"
+        else:
+            action = "would write" if dry_run else "write"
+        value = plan.value if len(plan.value) < 60 else plan.value[:57] + "..."
+        rows.append(f"| {plan.variable} | `{value}` | {action} |")
+    return [*rows, ""]
+
+
 def _markdown(state: dict, decision, facts, results, plans) -> str:
     lines = [f"## allocate {state['tick']} ({state['status']})", ""]
     if state["dry_run"]:
-        lines.append("**dry run** - the ledger was built, no variable was written.")
-        lines.append("")
-    lines.append("| family | status | routes |")
-    lines.append("|---|---|---|")
-    for name, family in decision.families.items():
-        lines.append(f"| {name} | {family.status} | {', '.join(family.routes)} |")
-    lines.append("")
-    lines.append("| family | provider | rejected because |")
-    lines.append("|---|---|---|")
-    for name, family in decision.families.items():
-        for provider, reason in sorted(family.rejected.items()):
-            lines.append(f"| {name} | {provider} | {reason} |")
-    lines.append("")
-    lines.append("| provider | used | margin | cap (paced) | cap (hard) | circuit |")
-    lines.append("|---|---|---|---|---|---|")
-    for provider, budget in state["budgets"].items():
-        lines.append(
-            f"| {provider} | {budget['used']} | {budget['margin']} | "
-            f"{budget['cap']} | {budget['cap_hard']} | {state['circuits'][provider]} |"
-        )
-    lines.append("")
-    lines.append(
+        lines += [
+            "**dry run** - the ledger was built, no variable was written.",
+            "",
+        ]
+    lines += _route_rows(decision)
+    lines += ["", *_budget_rows(state), ""]
+    lines += [
         f"Staleness `{state['staleness']}`, cursor `{state['cursor']}`, "
         f"cursor age {facts.cursor_age_s:.0f}s. "
         f"Scanned {facts.repos_scanned} repositories, {facts.runs_scanned} runs, "
-        f"added {facts.jobs_added} jobs."
-    )
-    lines.append("")
-    if results:
-        lines.append("| reconciliation | status | ledger | vendor | drift |")
-        lines.append("|---|---|---|---|---|")
-        for result in results:
-            lines.append(
-                f"| {result.source} | {result.status}{(' ' + result.reason).rstrip()} "
-                f"| {result.ledger_total} | {result.vendor_total} | {result.drift} |"
-            )
-        lines.append("")
-    if plans:
-        lines.append("| variable | value | action |")
-        lines.append("|---|---|---|")
-        for plan in plans:
-            action = (
-                "would write"
-                if state["dry_run"] and plan.changed
-                else ("write" if plan.changed else "unchanged")
-            )
-            value = plan.value if len(plan.value) < 60 else plan.value[:57] + "..."
-            lines.append(f"| {plan.variable} | `{value}` | {action} |")
-        lines.append("")
-    for warning in facts.warnings:
-        lines.append(f"- warning: {warning}")
+        f"added {facts.jobs_added} jobs.",
+        "",
+    ]
+    lines += _reconciliation_rows(results)
+    lines += _publish_rows(plans, state["dry_run"])
+    lines += [f"- warning: {warning}" for warning in facts.warnings]
     return "\n".join(lines) + "\n"
 
 

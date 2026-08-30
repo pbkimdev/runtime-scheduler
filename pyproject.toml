@@ -20,9 +20,17 @@ packages = ["scheduler"]
 
 [tool.ruff]
 line-length = 88
+exclude = [".venv", "__pycache__", "tests/fixtures"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+# C901 and PLR0912 are the pk-setup structural gate for Python.
+select = ["E", "F", "I", "UP", "B", "SIM", "C901", "PLR0912"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-branches = 12
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

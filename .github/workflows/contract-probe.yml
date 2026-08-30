@@ -69,10 +69,10 @@ jobs:
     # Must RUN. This is the shape the fallback jobs use: an unwritten output is
     # neither 'success' nor 'failure', so the work never reported a verdict.
     needs: b
+    # yamllint disable rule:line-length
     if: >-
-      failure()
-      && needs.b.outputs.x != 'success'
-      && needs.b.outputs.x != 'failure'
+      failure() && needs.b.outputs.x != 'success' && needs.b.outputs.x != 'failure'
+    # yamllint enable rule:line-length
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

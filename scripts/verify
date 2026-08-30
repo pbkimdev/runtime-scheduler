@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# The pk-setup gate. Runs every catalog execution once for the packs this
+# repository activates: common, python, json, yaml, shell.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit
+
+REPORTS="${VERIFY_REPORTS:-/tmp/runtime-scheduler-verify}"
+mkdir -p "$REPORTS"
+
+failures=0
+
+run_check() {
+  local check_name="$1"
+  shift
+  local report="$REPORTS/$check_name.log"
+  local check_status
+
+  "$@" >"$report" 2>&1
+  check_status=$?
+  if ((check_status == 0)); then
+    printf 'PASS %s\n' "$check_name"
+  else
+    printf 'FAIL %s (exit %d; %s)\n' \
+      "$check_name" "$check_status" "$report"
+    failures=$((failures + 1))
+  fi
+}
+
+mise_run() {
+  local spec="$1"
+  shift
+  if command -v mise >/dev/null 2>&1; then
+    mise exec "$spec" -- "$@"
+  else
+    "$@"
+  fi
+}
+
+mapfile -t yaml_files < <(
+  git ls-files -co --exclude-standard '*.yaml' '*.yml' |
+    grep -v '/tests/fixtures/' || true
+)
+mapfile -t shell_files < <(
+  git ls-files -co --exclude-standard '*.sh' || true
+)
+shell_files+=("scripts/verify")
+
+run_check gitleaks \
+  mise_run gitleaks@8.30.1 \
+  gitleaks dir --no-banner --no-color --redact "$ROOT"
+
+run_check ruff-format uv run ruff format --check .
+run_check ruff-check uv run ruff check .
+run_check pytest uv run pytest -q
+run_check vulture uvx vulture scheduler/ --min-confidence 80
+run_check pip-audit uvx pip-audit --strict
+
+run_check biome \
+  npx --yes @biomejs/biome@2.5.11 check --config-path biome.jsonc .
+
+if ((${#yaml_files[@]})); then
+  run_check yamlfmt \
+    mise_run yamlfmt@0.21.0 \
+    yamlfmt -lint -conf yamlfmt.yaml "${yaml_files[@]}"
+  run_check yamllint \
+    mise_run yamllint@1.38.0 \
+    yamllint -s -c .yamllint.yaml "${yaml_files[@]}"
+fi
+
+if ((${#shell_files[@]})); then
+  run_check shellcheck \
+    mise_run shellcheck@0.11.0 \
+    shellcheck --rcfile .shellcheckrc "${shell_files[@]}"
+  run_check shfmt \
+    mise_run shfmt@3.13.1 \
+    shfmt -d -i 2 -ci "${shell_files[@]}"
+fi
+
+if ((failures)); then
+  printf 'VERIFY FAIL (%d checks failed)\n' "$failures"
+  exit 1
+fi
+
+printf 'VERIFY PASS\n'
