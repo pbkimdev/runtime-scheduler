@@ -71,6 +71,7 @@ class Repos:
 class LedgerPolicy:
     overlap_minutes: int
     safety_seconds: int
+    commit_heartbeat_minutes: int
 
 
 @dataclass(frozen=True)
@@ -287,6 +288,9 @@ def parse_policy(raw: Mapping[str, Any], where: str = "policy") -> Policy:
         ledger=LedgerPolicy(
             overlap_minutes=int(_req(ledger_raw, "overlap_minutes", "[ledger]")),
             safety_seconds=int(_req(ledger_raw, "safety_seconds", "[ledger]")),
+            commit_heartbeat_minutes=int(
+                _req(ledger_raw, "commit_heartbeat_minutes", "[ledger]")
+            ),
         ),
         watchdog_max_state_age_epochs=int(
             _req(watchdog_raw, "max_state_age_epochs", "[watchdog]")

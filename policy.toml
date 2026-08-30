@@ -73,6 +73,13 @@ personal = []
 [ledger]
 overlap_minutes = 60
 safety_seconds = 60
+# A tick that saw no new job and ran no reconciliation only rewrites the
+# ledger once the cursor has moved this far past the committed one. Without
+# it the allocate workflow would commit about 96 times a day on a quiet
+# organization; with it the repository still sees hourly activity, which is
+# what keeps GitHub from disabling the scheduled workflows after 60 days
+# (evidence #8).
+commit_heartbeat_minutes = 60
 
 [watchdog]
 # The watchdog resets routes when RUNTIME_STATE.expires_at is more than this

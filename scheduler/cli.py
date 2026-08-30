@@ -14,7 +14,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import allocate as allocate_mod
@@ -24,6 +24,7 @@ from . import publish as publish_mod
 from . import reconcile as reconcile_mod
 from . import watchdog as watchdog_mod
 from .github import GitHubClient, GitHubError
+from .ledger import parse_ts
 from .policy import PolicyError, load_policy
 
 EXIT_OK = 0
@@ -151,6 +152,104 @@ def _markdown(state: dict, decision, facts, results, plans) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _reconcile(
+    client: GitHubClient, facts, policy, now: datetime
+) -> tuple[list[reconcile_mod.SourceResult], bool]:
+    threshold = policy.reconciliation.drift_alert_fraction
+    results = [
+        reconcile_mod.reconcile_github(
+            client,
+            facts.ledger,
+            now,
+            policy.repos.org,
+            personal=False,
+            threshold=threshold,
+            private_repos=facts.private_repos,
+        )
+    ]
+    personal_token = env("GH_PERSONAL_BILLING_TOKEN")
+    if personal_token is None:
+        results.append(
+            reconcile_mod.SourceResult(
+                source="github_personal",
+                status=reconcile_mod.STATUS_SKIPPED,
+                reason="no_token",
+            )
+        )
+    else:
+        results.append(
+            reconcile_mod.reconcile_github(
+                GitHubClient(token=personal_token),
+                facts.ledger,
+                now,
+                policy.repos.personal_owner,
+                personal=True,
+                threshold=threshold,
+            )
+        )
+    results.append(
+        reconcile_mod.reconcile_blacksmith(
+            facts.ledger,
+            token=env("BLACKSMITH_TOKEN"),
+            threshold=threshold,
+            owner=policy.repos.org,
+        )
+    )
+    alert = reconcile_mod.apply_results(
+        facts.ledger,
+        results,
+        now,
+        github_os_multiplier=policy.github_os_multiplier,
+        org=policy.repos.org,
+    )
+    return results, alert
+
+
+def ledger_commit_reason(facts, results, heartbeat_minutes: int) -> str:
+    """Why this tick's ledger is worth a commit, or `none`.
+
+    Committing every tick would put ~96 commits a day on a repository where
+    most ticks see nothing new. The heartbeat keeps the repository active for
+    the 60-day scheduled-workflow rule without that noise.
+    """
+    if facts.jobs_added:
+        return "jobs"
+    if results:
+        return "reconciliation"
+    loaded = parse_ts(facts.ledger.loaded_cursor)
+    current = parse_ts(facts.ledger.cursor)
+    if loaded is None or current is None:
+        return "heartbeat"
+    if current - loaded > timedelta(minutes=heartbeat_minutes):
+        return "heartbeat"
+    return "none"
+
+
+def _emit_output(name: str, value: str) -> None:
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(f"{name}={value}\n")
+
+
+def _report(decision, facts, *, dry_run: bool, changed: bool, reason: str) -> None:
+    """The human half of the output. stdout carries the decision as JSON."""
+    for warning in facts.warnings:
+        print(f"::warning::{warning}", file=sys.stderr)
+    print(
+        f"status={decision.status} staleness={facts.staleness} "
+        f"jobs_added={facts.jobs_added} dry_run={dry_run}",
+        file=sys.stderr,
+    )
+    print(
+        f"ledger_changed={'true' if changed else 'false'} reason={reason}",
+        file=sys.stderr,
+    )
+    for name, family in decision.families.items():
+        print(f"  {name}: {' '.join(family.routes)} ({family.status})", file=sys.stderr)
+
+
 def cmd_allocate(args: argparse.Namespace) -> int:
     try:
         policy = load_policy(args.policy)
@@ -163,60 +262,19 @@ def cmd_allocate(args: argparse.Namespace) -> int:
     ledger_dir = Path(args.ledger_dir)
 
     facts = facts_mod.collect_facts(now, policy, client, ledger_dir)
-    decision = allocate_mod.allocate(now, policy, facts)
 
     results: list[reconcile_mod.SourceResult] = []
     drift_alert = False
     if args.reconcile or reconcile_mod.should_reconcile(
         now, facts.ledger, policy.reconciliation.hour_utc
     ):
-        threshold = policy.reconciliation.drift_alert_fraction
-        results.append(
-            reconcile_mod.reconcile_github(
-                client,
-                facts.ledger,
-                now,
-                policy.repos.org,
-                personal=False,
-                threshold=threshold,
-                private_repos=facts.private_repos,
-            )
-        )
-        personal_token = env("GH_PERSONAL_BILLING_TOKEN")
-        if personal_token is None:
-            results.append(
-                reconcile_mod.SourceResult(
-                    source="github_personal",
-                    status=reconcile_mod.STATUS_SKIPPED,
-                    reason="no_token",
-                )
-            )
-        else:
-            results.append(
-                reconcile_mod.reconcile_github(
-                    GitHubClient(token=personal_token),
-                    facts.ledger,
-                    now,
-                    policy.repos.personal_owner,
-                    personal=True,
-                    threshold=threshold,
-                )
-            )
-        results.append(
-            reconcile_mod.reconcile_blacksmith(
-                facts.ledger,
-                token=env("BLACKSMITH_TOKEN"),
-                threshold=threshold,
-                owner=policy.repos.org,
-            )
-        )
-        drift_alert = reconcile_mod.apply_results(
-            facts.ledger,
-            results,
-            now,
-            github_os_multiplier=policy.github_os_multiplier,
-            org=policy.repos.org,
-        )
+        results, drift_alert = _reconcile(client, facts, policy, now)
+    if drift_alert:
+        # Routes are still published; they are just computed under the wider
+        # margin the alert asked for, which is the safe direction.
+        facts_mod.refresh_budgets(facts, policy)
+
+    decision = allocate_mod.allocate(now, policy, facts)
 
     skipped = [r.source for r in results if r.status == reconcile_mod.STATUS_SKIPPED]
     state = allocate_mod.state_json(
@@ -229,8 +287,16 @@ def cmd_allocate(args: argparse.Namespace) -> int:
     )
 
     # The ledger is written in both modes. Dry-run accumulates the history the
-    # first paced month needs; only the variables are withheld.
-    facts.ledger.write(ledger_dir)
+    # first paced month needs; only the variables are withheld. A tick that
+    # changed nothing worth committing leaves the file alone, so the workflow
+    # finds a clean `git status` and does not commit.
+    reason = ledger_commit_reason(
+        facts, results, policy.ledger.commit_heartbeat_minutes
+    )
+    changed = reason != "none"
+    if changed:
+        facts.ledger.write(ledger_dir)
+    _emit_output("ledger_changed", "true" if changed else "false")
 
     try:
         current = client.list_org_variables(policy.repos.org)
@@ -257,16 +323,7 @@ def cmd_allocate(args: argparse.Namespace) -> int:
 
     print(json.dumps(state, separators=(",", ":"), sort_keys=True))
     _write_summary(_markdown(state, decision, facts, results, plans))
-
-    for warning in facts.warnings:
-        print(f"::warning::{warning}", file=sys.stderr)
-    print(
-        f"status={decision.status} staleness={facts.staleness} "
-        f"jobs_added={facts.jobs_added} dry_run={args.dry_run}",
-        file=sys.stderr,
-    )
-    for name, family in decision.families.items():
-        print(f"  {name}: {' '.join(family.routes)} ({family.status})", file=sys.stderr)
+    _report(decision, facts, dry_run=args.dry_run, changed=changed, reason=reason)
 
     if exit_code != EXIT_OK:
         return exit_code

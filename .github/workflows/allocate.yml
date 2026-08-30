@@ -49,8 +49,11 @@ jobs:
             uv run scheduler allocate --dry-run | tee decision.json
           fi
 
+      # The allocator decides whether this tick is worth a commit: new
+      # jobs, a reconciliation, or the hourly heartbeat. It leaves the file
+      # untouched otherwise, so git agrees with the step output.
       - name: Commit the ledger
-        if: always()
+        if: always() && steps.allocate.outputs.ledger_changed == 'true'
         run: |
           set -euo pipefail
           if [ -z "$(git status --porcelain ledger)" ]; then
