@@ -43,6 +43,7 @@ jobs:
           # Passing the caller's command through the environment keeps the
           # expression out of the script body.
           WORK_COMMAND: ${{ inputs.run }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash -euo pipefail -c "$WORK_COMMAND"
       - id: report
         name: report
@@ -75,6 +76,7 @@ jobs:
         shell: bash
         env:
           WORK_COMMAND: ${{ inputs.run }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash -euo pipefail -c "$WORK_COMMAND"
       - id: report
         name: report
@@ -103,6 +105,7 @@ jobs:
         shell: bash
         env:
           WORK_COMMAND: ${{ inputs.run }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash -euo pipefail -c "$WORK_COMMAND"
       - id: report
         name: report

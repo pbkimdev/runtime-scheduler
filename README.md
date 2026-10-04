@@ -37,6 +37,10 @@ jobs:
 | `side_effect` | `none`, `idempotent`, or `external`. Default `external`. Only `none` gets fallback jobs |
 | `timeout_minutes` | Per attempt. Default 30 |
 
+In `linux.yml`, every `work` step also gets `GITHUB_TOKEN` set to the job's
+`github.token`, limited to `contents: read`, so tools such as mise call the
+GitHub API authenticated. A caller cannot pass that token through `with`.
+
 `linux.yml` has three jobs (`primary`, `fallback`, `last`); `windows.yml` and
 `macos.yml` have two, because those families have two route slots.
 
