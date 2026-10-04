@@ -10,7 +10,7 @@
       // Captured API payloads. Reformatting them would hide what the API sent.
       "!**/tests/fixtures/**",
       "!.venv",
-      "!.pkai"
+      "!.pk"
     ]
   },
   "assist": {
