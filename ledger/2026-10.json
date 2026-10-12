@@ -1,6 +1,6 @@
 {
 "corrections":[{"at":"2026-10-11T06:10:28Z","delta":-132.0,"owner":"pbkimdev","provider":"github","source":"github_org"},{"at":"2026-10-12T06:36:37Z","delta":-65.0,"owner":"pbkimdev","provider":"github","source":"github_org"}],
-"cursor":"2026-10-12T16:07:44Z",
+"cursor":"2026-10-12T22:58:16Z",
 "drift_alert_until":"2026-10-13T06:36:37Z",
 "month":"2026-10",
 "reconciled_on":"2026-10-12",
@@ -523,6 +523,9 @@
 {"completed_at":"2026-10-12T15:27:20Z","conclusion":"failure","created_at":"2026-10-12T15:27:19Z","event":"push","family":"linux","infra":true,"key":"38270343781:1:114882792454","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / last","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T15:27:19Z","work":"none"},
 {"completed_at":"2026-10-12T15:45:00Z","conclusion":"failure","created_at":"2026-10-12T15:44:58Z","event":"push","family":"linux","infra":true,"key":"38272491501:1:114889903817","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / primary","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T15:44:58Z","work":"none"},
 {"completed_at":"2026-10-12T15:45:02Z","conclusion":"failure","created_at":"2026-10-12T15:45:00Z","event":"push","family":"linux","infra":true,"key":"38272491501:1:114889918909","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / fallback","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T15:45:00Z","work":"none"},
-{"completed_at":"2026-10-12T15:45:05Z","conclusion":"failure","created_at":"2026-10-12T15:45:03Z","event":"push","family":"linux","infra":true,"key":"38272491501:1:114889935217","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / last","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T15:45:03Z","work":"none"}
+{"completed_at":"2026-10-12T15:45:05Z","conclusion":"failure","created_at":"2026-10-12T15:45:03Z","event":"push","family":"linux","infra":true,"key":"38272491501:1:114889935217","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / last","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T15:45:03Z","work":"none"},
+{"completed_at":"2026-10-12T16:26:38Z","conclusion":"failure","created_at":"2026-10-12T16:26:35Z","event":"push","family":"linux","infra":true,"key":"38277419503:1:114906182005","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / primary","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T16:26:35Z","work":"none"},
+{"completed_at":"2026-10-12T16:26:40Z","conclusion":"failure","created_at":"2026-10-12T16:26:38Z","event":"push","family":"linux","infra":true,"key":"38277419503:1:114906202002","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / fallback","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T16:26:38Z","work":"none"},
+{"completed_at":"2026-10-12T16:26:42Z","conclusion":"failure","created_at":"2026-10-12T16:26:40Z","event":"push","family":"linux","infra":true,"key":"38277419503:1:114906216975","labels":["ubuntu-latest"],"latency_s":0.0,"name":"linux / last","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":true,"started_at":"2026-10-12T16:26:40Z","work":"none"}
 ]
 }
