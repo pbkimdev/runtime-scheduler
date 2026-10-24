@@ -135,15 +135,15 @@ Reject reasons: `not_live`, `circuit_open`, `circuit_half_open`,
 ## Running locally
 
 ```bash
-make dev
-make verify                       # the whole gate, via ./scripts/verify
-make lint                         # just ruff
-make test                         # just pytest
+mise run dev
+mise run verify                   # the whole gate, via ./scripts/verify
+mise run lint                     # just ruff
+mise run test                     # just pytest
 GH_TOKEN=$(gh auth token) uv run scheduler allocate \
   --dry-run --ledger-dir /tmp/ledger
 ```
 
-`make verify` runs `./scripts/verify`: gitleaks, ruff format and check (with
+`mise run verify` runs `./scripts/verify`: gitleaks, ruff format and check (with
 C901 and PLR0912 as the complexity gate), pytest, vulture, pip-audit, Biome on
 JSON, yamlfmt and yamllint on YAML, and shellcheck and shfmt on shell.
 `mise.toml` pins the non-Python tools; `uvx` fetches vulture and pip-audit.
@@ -152,7 +152,7 @@ A dry run reads the organization, builds the ledger, prints the decision as
 JSON on stdout and a summary on stderr, and writes no variable. `--now ISO`
 pins the clock. `--reconcile` forces the daily vendor comparison.
 
-`make allocate-dry` is the same thing against the repository's own `ledger/`.
+`mise run allocate-dry` is the same thing against the repository's own `ledger/`.
 
 ## Modes
 
@@ -188,7 +188,7 @@ allowance.
 | `watchdog.yml` | Offset by half an epoch: reset routes when the decision expired |
 | `contract.yml` | Weekly: prove the undocumented E4a job-output behavior still holds |
 | `contract-probe.yml` | The red-by-design probe `contract.yml` dispatches |
-| `ci.yml` | `make verify` on push and pull request. The scheduler does not route itself |
+| `ci.yml` | `mise run verify` on push and pull request. The scheduler does not route itself |
 
 ## Layout
 
