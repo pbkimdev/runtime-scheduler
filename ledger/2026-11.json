@@ -1,6 +1,6 @@
 {
 "corrections":[{"at":"2026-11-01T08:01:42Z","delta":-19.0,"owner":"pbkimdev","provider":"github","source":"github_org"},{"at":"2026-11-02T09:58:32Z","delta":-18.0,"owner":"pbkimdev","provider":"github","source":"github_org"},{"at":"2026-11-03T09:51:44Z","delta":-9.0,"owner":"pbkimdev","provider":"github","source":"github_org"}],
-"cursor":"2026-11-03T09:50:44Z",
+"cursor":"2026-11-03T17:32:49Z",
 "drift_alert_until":"2026-11-04T09:51:44Z",
 "month":"2026-11",
 "reconciled_on":"2026-11-03",
@@ -18,6 +18,7 @@
 {"completed_at":"2026-11-01T14:59:59Z","conclusion":"success","created_at":"2026-11-01T14:42:41Z","event":"push","family":"linux","infra":false,"key":"41317534678:1:124880654960","labels":["self-hosted","cabana-archbox"],"latency_s":16.0,"name":"linux","native":18.0,"normalized":18.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":false,"started_at":"2026-11-01T14:42:57Z","work":"none"},
 {"completed_at":"2026-11-01T23:11:35Z","conclusion":"success","created_at":"2026-11-01T22:58:16Z","event":"push","family":"linux","infra":false,"key":"41359752297:1:125007413517","labels":["blacksmith-4vcpu-ubuntu-2404"],"latency_s":6.0,"name":"linux","native":28.0,"normalized":28.0,"private":true,"provider":"blacksmith","repo":"pbkimdev/mantra","routed":false,"started_at":"2026-11-01T22:58:22Z","work":"none"},
 {"completed_at":"2026-11-02T11:01:19Z","conclusion":"success","created_at":"2026-11-02T11:01:13Z","event":"schedule","family":"linux","infra":false,"key":"41433389362:1:125237232956","labels":["ubuntu-22.04"],"latency_s":2.0,"name":"probe","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/runtime-scheduler-lab-private","routed":false,"started_at":"2026-11-02T11:01:15Z","work":"none"},
-{"completed_at":"2026-11-02T15:19:23Z","conclusion":"failure","created_at":"2026-11-02T15:11:00Z","event":"push","family":"linux","infra":false,"key":"41469058060:1:125357505291","labels":["self-hosted","cabana-modal"],"latency_s":18.0,"name":"linux","native":9.0,"normalized":9.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":false,"started_at":"2026-11-02T15:11:18Z","work":"none"}
+{"completed_at":"2026-11-02T15:19:23Z","conclusion":"failure","created_at":"2026-11-02T15:11:00Z","event":"push","family":"linux","infra":false,"key":"41469058060:1:125357505291","labels":["self-hosted","cabana-modal"],"latency_s":18.0,"name":"linux","native":9.0,"normalized":9.0,"private":true,"provider":"github","repo":"pbkimdev/mantra","routed":false,"started_at":"2026-11-02T15:11:18Z","work":"none"},
+{"completed_at":"2026-11-03T10:49:37Z","conclusion":"success","created_at":"2026-11-03T10:49:33Z","event":"schedule","family":"linux","infra":false,"key":"41622463272:1:125871346094","labels":["ubuntu-22.04"],"latency_s":1.0,"name":"probe","native":1.0,"normalized":2.0,"private":true,"provider":"github","repo":"pbkimdev/runtime-scheduler-lab-private","routed":false,"started_at":"2026-11-03T10:49:34Z","work":"none"}
 ]
 }
